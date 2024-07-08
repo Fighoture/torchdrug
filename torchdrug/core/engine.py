@@ -239,6 +239,20 @@ class Engine(core.Configurable):
         checkpoint = os.path.expanduser(checkpoint)
         state = torch.load(checkpoint, map_location=self.device)
 
+        for param_name, param in self.model.named_parameters():
+            state_param = state["model"].get(param_name, None)
+            if state_param is None:
+                raise ValueError(f"Model cannot load weight {param_name} due to unmatched model structure!")
+            else:
+                if param.size() != state_param.size():
+                    print(f"Weight '{param_name}' is not match.")
+                    if param.size(1) % state_param.size(1) != 0:
+                        raise ValueError(f"Model cannot load weight {param_name} due to unmatched model weight!")
+                    duplicate = param.size(1) // state_param.size(1)
+                    duplicated_state_param = torch.cat([state_param for _ in range(duplicate)], dim=1)
+                    state["model"][param_name] = duplicated_state_param
+                    print(f"Weight '{param_name}' has been duplicated by {duplicate}*.")
+
         self.model.load_state_dict(state["model"], strict=strict)
 
         if load_optimizer:

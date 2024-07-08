@@ -158,9 +158,10 @@ class SpatialLineGraph(nn.Module, core.Configurable):
         num_angle_bin (int, optional): number of bins to discretize angles between edges
     """
 
-    def __init__(self, num_angle_bin=8):
+    def __init__(self, num_angle_bin=8, dimension=1):
         super(SpatialLineGraph, self).__init__()
         self.num_angle_bin = num_angle_bin
+        self.dimension = dimension
 
     def forward(self, graph):
         """
@@ -173,9 +174,9 @@ class SpatialLineGraph(nn.Module, core.Configurable):
         Returns:
             graph (PackedGraph): the spatial line graph
         """
-        line_graph = graph.line_graph()
+        line_graph = graph.line_graph(dimension=self.dimension)
         node_in, node_out = graph.edge_list[:, :2].t()
-        edge_in, edge_out = line_graph.edge_list.t()
+        edge_in, edge_out, edge_type = line_graph.edge_list.t()
 
         # compute the angle ijk
         node_i = node_out[edge_out]
@@ -187,8 +188,9 @@ class SpatialLineGraph(nn.Module, core.Configurable):
         y = torch.cross(vector1, vector2).norm(dim=-1)
         angle = torch.atan2(y, x)
         relation = (angle / math.pi * self.num_angle_bin).long().clamp(max=self.num_angle_bin - 1)
-        edge_list = torch.cat([line_graph.edge_list, relation.unsqueeze(-1)], dim=-1)
+        relation += (edge_type * self.num_angle_bin)
+        edge_list = torch.cat([line_graph.edge_list[:, :2], relation.unsqueeze(-1)], dim=-1)
 
         return type(line_graph)(edge_list, num_nodes=line_graph.num_nodes, offsets=line_graph._offsets,
-                                num_edges=line_graph.num_edges, num_relation=self.num_angle_bin,
+                                num_edges=line_graph.num_edges, num_relation=self.num_angle_bin * self.dimension,
                                 meta_dict=line_graph.meta_dict, **line_graph.data_dict)

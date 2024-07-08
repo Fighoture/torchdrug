@@ -33,7 +33,8 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
     """
 
     def __init__(self, input_dim, hidden_dims, num_relation, edge_input_dim=None, num_angle_bin=None,
-                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, readout="sum"):
+                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, line_graph_dimension=1,
+                 readout="sum"):
         super(GeometryAwareRelationalGraphNeuralNetwork, self).__init__()
 
         if not isinstance(hidden_dims, Sequence):
@@ -53,11 +54,11 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
             self.layers.append(layers.GeometricRelationalGraphConv(self.dims[i], self.dims[i + 1], num_relation,
                                                                    None, batch_norm, activation))
         if num_angle_bin:
-            self.spatial_line_graph = layers.SpatialLineGraph(num_angle_bin)
+            self.spatial_line_graph = layers.SpatialLineGraph(num_angle_bin, line_graph_dimension)
             self.edge_layers = nn.ModuleList()
             for i in range(len(self.edge_dims) - 1):
                 self.edge_layers.append(layers.GeometricRelationalGraphConv(
-                    self.edge_dims[i], self.edge_dims[i + 1], num_angle_bin, None, batch_norm, activation))
+                    self.edge_dims[i], self.edge_dims[i + 1], num_angle_bin * line_graph_dimension, None, batch_norm, activation))
 
         if batch_norm:
             self.batch_norms = nn.ModuleList()
