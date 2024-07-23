@@ -218,7 +218,6 @@ class AlphaCarbonNode(nn.Module, core.Configurable):
 
         return graph
 
-
 @R.register("layers.geometry.IdentityNode")
 class IdentityNode(nn.Module, core.Configurable):
     """

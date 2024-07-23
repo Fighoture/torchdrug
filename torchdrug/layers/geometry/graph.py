@@ -163,7 +163,7 @@ class SpatialLineGraph(nn.Module, core.Configurable):
         self.num_angle_bin = num_angle_bin
         self.dimension = dimension
 
-    def forward(self, graph):
+    def forward(self, graph, edge_importance=None):
         """
         Generate the spatial line graph of the input graph.
         The edge types are decided by the angles between two adjacent edges in the input graph.
@@ -174,8 +174,8 @@ class SpatialLineGraph(nn.Module, core.Configurable):
         Returns:
             graph (PackedGraph): the spatial line graph
         """
-        line_graph = graph.line_graph(dimension=self.dimension)
         node_in, node_out = graph.edge_list[:, :2].t()
+        line_graph = graph.line_graph(dimension=self.dimension, edge_importance=edge_importance)
         edge_in, edge_out, edge_type = line_graph.edge_list.t()
 
         # compute the angle ijk

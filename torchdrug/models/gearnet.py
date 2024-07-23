@@ -33,8 +33,8 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
     """
 
     def __init__(self, input_dim, hidden_dims, num_relation, edge_input_dim=None, num_angle_bin=None,
-                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, line_graph_dimension=1,
-                 readout="sum"):
+                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, filter=False,
+                 line_graph_dimension=1, readout="sum"):
         super(GeometryAwareRelationalGraphNeuralNetwork, self).__init__()
 
         if not isinstance(hidden_dims, Sequence):
@@ -48,6 +48,7 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
         self.short_cut = short_cut
         self.concat_hidden = concat_hidden
         self.batch_norm = batch_norm
+        self.filter = filter
 
         self.layers = nn.ModuleList()
         for i in range(len(self.dims) - 1):
@@ -97,6 +98,13 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
             if self.short_cut and hidden.shape == layer_input.shape:
                 hidden = hidden + layer_input
             if self.num_angle_bin:
+                if self.filter:
+                    noise = torch.randn_like(layer_input) * 0.01
+                    noise_hidden = self.layers[i](graph, layer_input + noise)
+                    noise_diff = torch.abs(noise_hidden - hidden).sum(1)
+                    edge_importance = noise_diff[graph.edge_list[:, :2]].sum(1)
+                    line_graph = self.spatial_line_graph(graph, edge_importance)
+
                 edge_hidden = self.edge_layers[i](line_graph, edge_input)
                 edge_weight = graph.edge_weight.unsqueeze(-1)
                 node_out = graph.edge_list[:, 1] * self.num_relation + graph.edge_list[:, 2]

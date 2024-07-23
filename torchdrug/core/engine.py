@@ -238,22 +238,25 @@ class Engine(core.Configurable):
             logger.warning("Load checkpoint from %s" % checkpoint)
         checkpoint = os.path.expanduser(checkpoint)
         state = torch.load(checkpoint, map_location=self.device)
+        model_state = state["model"]
 
+        # model state weight synchronize
         for param_name, param in self.model.named_parameters():
-            state_param = state["model"].get(param_name, None)
+            state_param = model_state.get(param_name, None)
             if state_param is None:
-                raise ValueError(f"Model cannot load weight {param_name} due to unmatched model structure!")
-            else:
-                if param.size() != state_param.size():
-                    print(f"Weight '{param_name}' is not match.")
-                    if param.size(1) % state_param.size(1) != 0:
-                        raise ValueError(f"Model cannot load weight {param_name} due to unmatched model weight!")
-                    duplicate = param.size(1) // state_param.size(1)
-                    duplicated_state_param = torch.cat([state_param for _ in range(duplicate)], dim=1)
-                    state["model"][param_name] = duplicated_state_param
-                    print(f"Weight '{param_name}' has been duplicated by {duplicate}*.")
+                module.logger.warning(f"Cannot find {param_name} weight in model checkpoint. Skipped.")
+                continue
 
-        self.model.load_state_dict(state["model"], strict=strict)
+            if param.size() != state_param.size():
+                print(f"Weight '{param_name}' is not match.")
+                if param.size(1) % state_param.size(1) != 0:
+                    raise ValueError(f"Model cannot load weight {param_name} due to unmatched model weight!")
+                duplicate = param.size(1) // state_param.size(1)
+                duplicated_state_param = torch.cat([state_param for _ in range(duplicate)], dim=1)
+                model_state[param_name] = duplicated_state_param
+                print(f"Weight '{param_name}' has been duplicated by {duplicate}*.")
+
+        self.model.load_state_dict(model_state, strict=strict)
 
         if load_optimizer:
             self.optimizer.load_state_dict(state["optimizer"])
@@ -263,6 +266,7 @@ class Engine(core.Configurable):
                         state[k] = v.to(self.device)
 
         comm.synchronize()
+
 
     def save(self, checkpoint):
         """

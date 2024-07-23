@@ -1639,7 +1639,7 @@ class PackedGraph(Graph):
         """
         return self.graph_mask(index, compact=True)
 
-    def line_graph(self, dimension=1):
+    def line_graph(self, dimension=1, edge_importance=None):
         """
         Construct a packed line graph of this packed graph.
         The node features of the line graphs are inherited from the edge features of the original graphs.
@@ -1715,6 +1715,19 @@ class PackedGraph(Graph):
                 middle_edge_out = middle_edge_out[middle_edge_out_index]
                 # edge_list = torch.stack([edge_in, edge_out], dim=-1)
                 add = torch.stack([middle[middle_edge_in][:, 0], middle[middle_edge_out][:, 1], torch.ones(middle_edge_in.shape[0], dtype=torch.long, device=self.device)], dim=-1)
+
+                if edge_importance is not None:
+                    node_range = int(num_nodes[i])
+                    if i == 0:
+                        node_start = 0
+                        node_end = node_range
+                    else:
+                        node_start = end
+                        node_end += node_range
+                    edge_importance_range = edge_importance[node_start:node_end]
+                    remain_edge_idx = edge_importance_range.argsort()[(edge_importance_range.shape[0] // 2):]
+                    mask = torch.all(torch.isin(add[:, :2], remain_edge_idx), dim=1)
+                    add = add[mask]
 
                 edge_list = torch.cat([former, middle, add, latter])
                 num_edges[i] += add.shape[0]
