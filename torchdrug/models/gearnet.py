@@ -109,12 +109,6 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
             if self.short_cut and hidden.shape == layer_input.shape:
                 hidden = hidden + layer_input
 
-            if self.transformer_heads:
-                global_hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
-                global_hidden = self.trans_linear[i](global_hidden)
-                global_hidden = self.layers[i].activation(self.trans_batch_norms[i](global_hidden))
-                hidden = hidden + global_hidden
-
             if self.num_angle_bin:
                 if self.filter:
                     noise = torch.randn_like(layer_input) * 0.01
@@ -133,6 +127,13 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
                 update = self.layers[i].activation(update)
                 hidden = hidden + update
                 edge_input = edge_hidden
+
+            if i == len(self.layers) - 1 and self.transformer_heads:
+                global_hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
+                global_hidden = self.trans_linear[i](global_hidden)
+                global_hidden = self.layers[i].activation(self.trans_batch_norms[i](global_hidden))
+                hidden = hidden + global_hidden
+
             if self.batch_norm:
                 hidden = self.batch_norms[i](hidden)
 
