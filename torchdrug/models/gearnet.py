@@ -3,6 +3,7 @@ from collections.abc import Sequence
 import torch
 from torch import nn
 from torch_scatter import scatter_add
+from torch_geometric.nn import TransformerConv
 
 from torchdrug import core, layers
 from torchdrug.core import Registry as R
@@ -34,7 +35,7 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
 
     def __init__(self, input_dim, hidden_dims, num_relation, edge_input_dim=None, num_angle_bin=None,
                  short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, filter=False,
-                 line_graph_dimension=1, readout="sum"):
+                 transformer_heads=None, line_graph_dimension=1, readout="sum"):
         super(GeometryAwareRelationalGraphNeuralNetwork, self).__init__()
 
         if not isinstance(hidden_dims, Sequence):
@@ -49,11 +50,19 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
         self.concat_hidden = concat_hidden
         self.batch_norm = batch_norm
         self.filter = filter
+        self.transformer_heads = transformer_heads
 
         self.layers = nn.ModuleList()
         for i in range(len(self.dims) - 1):
             self.layers.append(layers.GeometricRelationalGraphConv(self.dims[i], self.dims[i + 1], num_relation,
                                                                    None, batch_norm, activation))
+        if transformer_heads:
+            self.trans_layers = nn.ModuleList()
+            self.trans_linear = nn.ModuleList()
+            for i in range(len(self.dims) - 1):
+                self.trans_layers.append(TransformerConv(self.dims[i + 1], self.dims[i + 1], heads=transformer_heads, concat=True))
+                self.trans_linear.append(nn.Linear(self.dims[i + 1] * transformer_heads, self.dims[i + 1]))
+
         if num_angle_bin:
             self.spatial_line_graph = layers.SpatialLineGraph(num_angle_bin, line_graph_dimension)
             self.edge_layers = nn.ModuleList()
@@ -62,8 +71,10 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
                     self.edge_dims[i], self.edge_dims[i + 1], num_angle_bin * line_graph_dimension, None, batch_norm, activation))
 
         if batch_norm:
+            self.trans_batch_norms = nn.ModuleList()
             self.batch_norms = nn.ModuleList()
             for i in range(len(self.dims) - 1):
+                self.trans_batch_norms.append(nn.BatchNorm1d(self.dims[i + 1]))
                 self.batch_norms.append(nn.BatchNorm1d(self.dims[i + 1]))
 
         if readout == "sum":
@@ -95,6 +106,11 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
 
         for i in range(len(self.layers)):
             hidden = self.layers[i](graph, layer_input)
+            if self.transformer_heads:
+                hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
+                hidden = self.trans_linear[i](hidden)
+                hidden = self.layers[i].activation(self.trans_batch_norms[i](hidden))
+
             if self.short_cut and hidden.shape == layer_input.shape:
                 hidden = hidden + layer_input
             if self.num_angle_bin:
@@ -117,6 +133,7 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
                 edge_input = edge_hidden
             if self.batch_norm:
                 hidden = self.batch_norms[i](hidden)
+
             hiddens.append(hidden)
             layer_input = hidden
 
