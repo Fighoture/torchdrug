@@ -57,11 +57,8 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
             self.layers.append(layers.GeometricRelationalGraphConv(self.dims[i], self.dims[i + 1], num_relation,
                                                                    None, batch_norm, activation))
         if transformer_heads:
-            self.trans_layers = nn.ModuleList()
-            self.trans_linear = nn.ModuleList()
-            for i in range(len(self.dims) - 1):
-                self.trans_layers.append(TransformerConv(self.dims[i + 1], self.dims[i + 1], heads=transformer_heads, concat=True))
-                self.trans_linear.append(nn.Linear(self.dims[i + 1] * transformer_heads, self.dims[i + 1]))
+            self.trans_layers = TransformerConv(self.dims[-1], self.dims[-1], heads=transformer_heads, concat=True)
+            self.trans_linear = nn.Linear(self.dims[-1] * transformer_heads, self.dims[-1])
 
         if num_angle_bin:
             self.spatial_line_graph = layers.SpatialLineGraph(num_angle_bin, line_graph_dimension)
@@ -71,10 +68,9 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
                     self.edge_dims[i], self.edge_dims[i + 1], num_angle_bin * line_graph_dimension, None, batch_norm, activation))
 
         if batch_norm:
-            self.trans_batch_norms = nn.ModuleList()
+            self.trans_batch_norms = nn.BatchNorm1d(self.dims[-1])
             self.batch_norms = nn.ModuleList()
             for i in range(len(self.dims) - 1):
-                self.trans_batch_norms.append(nn.BatchNorm1d(self.dims[i + 1]))
                 self.batch_norms.append(nn.BatchNorm1d(self.dims[i + 1]))
 
         if readout == "sum":
@@ -129,9 +125,9 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
                 edge_input = edge_hidden
 
             if i == len(self.layers) - 1 and self.transformer_heads:
-                global_hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
-                global_hidden = self.trans_linear[i](global_hidden)
-                global_hidden = self.layers[i].activation(self.trans_batch_norms[i](global_hidden))
+                global_hidden = self.trans_layers(hidden, graph.edge_list[:, :2].T)
+                global_hidden = self.trans_linear(global_hidden)
+                global_hidden = self.layers[i].activation(self.trans_batch_norms(global_hidden))
                 hidden = hidden + global_hidden
 
             if self.batch_norm:
