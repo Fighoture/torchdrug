@@ -1,5 +1,6 @@
 # PyCharm
 /.idea
+/torchdrug/.idea
 
 # Sphinx
 /doc/build

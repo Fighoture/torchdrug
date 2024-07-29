@@ -34,7 +34,7 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
     """
 
     def __init__(self, input_dim, hidden_dims, num_relation, edge_input_dim=None, num_angle_bin=None,
-                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, filter=False,
+                 short_cut=False, batch_norm=False, activation="relu", concat_hidden=False, filter=None,
                  transformer_heads=None, line_graph_dimension=1, readout="sum"):
         super(GeometryAwareRelationalGraphNeuralNetwork, self).__init__()
 
@@ -106,20 +106,22 @@ class GeometryAwareRelationalGraphNeuralNetwork(nn.Module, core.Configurable):
 
         for i in range(len(self.layers)):
             hidden = self.layers[i](graph, layer_input)
-            if self.transformer_heads:
-                hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
-                hidden = self.trans_linear[i](hidden)
-                hidden = self.layers[i].activation(self.trans_batch_norms[i](hidden))
-
             if self.short_cut and hidden.shape == layer_input.shape:
                 hidden = hidden + layer_input
+
+            if self.transformer_heads:
+                global_hidden = self.trans_layers[i](hidden, graph.edge_list[:, :2].T)
+                global_hidden = self.trans_linear[i](global_hidden)
+                global_hidden = self.layers[i].activation(self.trans_batch_norms[i](global_hidden))
+                hidden = hidden + global_hidden
+
             if self.num_angle_bin:
                 if self.filter:
                     noise = torch.randn_like(layer_input) * 0.01
                     noise_hidden = self.layers[i](graph, layer_input + noise)
                     noise_diff = torch.abs(noise_hidden - hidden).sum(1)
                     edge_importance = noise_diff[graph.edge_list[:, :2]].sum(1)
-                    line_graph = self.spatial_line_graph(graph, edge_importance)
+                    line_graph = self.spatial_line_graph(graph, edge_importance, self.filter)
 
                 edge_hidden = self.edge_layers[i](line_graph, edge_input)
                 edge_weight = graph.edge_weight.unsqueeze(-1)
